@@ -281,11 +281,70 @@
     .menubar .hide-sm { display: none; }
     .dock button, .dock button .face { width: 46px; height: 46px; }
   }
+  /* ---------- Aquarium wallpaper ---------- */
+    #aquarium {
+    position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+    background: linear-gradient(to bottom, #dfeaf5 0%, #dfeaf5 4%, #cfe6ff 4.3%, #9cc8fb 9%, #7fb3f5 40%, #9fcbfb 85%, #b9dcfc 100%);
+  }
+  #aquarium .surface {
+    position: absolute; left: 0; right: 0; top: 4%; height: 4px; background: #4a5d78; opacity: .6;
+  }
+  #aquarium .light {
+    position: absolute; left: -10%; right: -10%; top: 4%; height: 8%;
+    background: linear-gradient(to bottom, rgba(255,255,255,.55), rgba(255,255,255,0));
+    animation: shimmer 6s ease-in-out infinite alternate;
+  }
+  @keyframes shimmer { from { opacity: .6; transform: translateX(-2%); } to { opacity: 1; transform: translateX(2%); } }
+
+  /* 물고기 */
+  #aquarium .fish { position: absolute; left: 0; line-height: 1; will-change: transform; }
+  #aquarium .fish span { display: inline-block; animation: bob 3s ease-in-out infinite alternate; }
+  #aquarium .fish.right span { transform: scaleX(-1); }   /* 오른쪽으로 갈 땐 좌우반전 */
+  @keyframes swimLeft  { from { transform: translateX(110vw); } to { transform: translateX(-15vw); } }
+  @keyframes swimRight { from { transform: translateX(-15vw); } to { transform: translateX(110vw); } }
+  @keyframes bob { from { margin-top: -8px; } to { margin-top: 8px; } }
+
+  /* 해파리 */
+  #aquarium .jelly { position: absolute; line-height: 1; opacity: .9; animation: jelly 7s ease-in-out infinite alternate; }
+  @keyframes jelly { 0% { transform: translate(0, 0); } 50% { transform: translate(12px, -40px) scale(1.05, .95); } 100% { transform: translate(-8px, 20px); } }
+
+  /* 거품 */
+  #aquarium .bubble {
+    position: absolute; bottom: -40px; border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,.8);
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.9), rgba(255,255,255,.15) 40%, rgba(180,210,255,.1));
+    animation: rise linear infinite;
+  }
+  @keyframes rise {
+    0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; }
+    50% { transform: translate(15px, -50vh); }
+    100% { transform: translate(-10px, -100vh); opacity: .2; }
+  }
+
+  /* 바닥 장식 */
+  #aquarium .floor {
+    position: absolute; left: 0; right: 0; bottom: -6px;
+    display: flex; justify-content: space-around; align-items: flex-end; font-size: 46px;
+  }
+  #aquarium .floor span { display: inline-block; transform-origin: bottom center; }
+  #aquarium .floor .sway { animation: sway 4s ease-in-out infinite alternate; }
+  @keyframes sway { from { transform: rotate(-6deg); } to { transform: rotate(6deg); } }
+
+  @media (prefers-reduced-motion: reduce) { #aquarium * { animation-play-state: paused !important; } }
 </style>
 </head>
 <body>
 
-<div class="desktop"><canvas id="game" aria-hidden="true"></canvas></div>
+<div class="desktop" aria-hidden="true">
+<div id="aquarium">
+  <div class="light"></div>
+  <div class="surface"></div>
+  <div class="floor">
+    <span>🏺</span><span class="sway">🪸</span><span class="sway">🌿</span><span>🗿</span>
+    <span class="sway">🪸</span><span>🐚</span><span class="sway">🌿</span>
+  </div>
+</div>
+</div>
 
 <!-- Menu bar -->
 <div class="menubar">
@@ -624,181 +683,47 @@
 
 <script>
 (function () {
-  var cv = document.getElementById('game');
-  var ctx = cv.getContext('2d');
-  var _fr = ctx.fillRect.bind(ctx);
-  ctx.fillRect = function (x, y, w, hh) { _fr(Math.round(x), Math.round(y), Math.round(w), Math.round(hh)); };
-  var S, W, H, GY;
-  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var tank = document.getElementById('aquarium');
+  var r = function (a, b) { return a + Math.random() * (b - a); };
 
-  // ---- pixel sprites ----
-  var PAL = {
-    K:'#1b1b22', k:'#3a3a48', S:'#ffdcc6', s:'#f2bfa4', E:'#1b1b22', w:'#ffffff', B:'#ff9fa8', M:'#d9606e',
-    G:'#c4c7cf', g:'#9a9ea8', P:'#3f4f78', W:'#f4f4f4', O:'#1b1b22'
-  };
-  var ME = [
-    '.....KKKKKK.....',
-    '...KKKKKKKKKK...',
-    '..KKKKKKKKKKKK..',
-    '.KKKKKKKKKKKKKK.',
-    '.KKKKKKKKKKKKKK.',
-    '.KKKSKKKSSKKKKK.',
-    'KKKSSSSSSSSSSKKK',
-    'KKSSSSSSSSSSSSKK',
-    'KKSSwESSSSwESSKK',
-    'KKSSEESSSSEESSKK',
-    'KKSBSSSSSSSSBSKK',
-    'KKKSSSSMMSSSSKKK',
-    'KKKkSSSSSSSSkKKK',
-    '.KK..SSSSSS..KK.',
-    '....GGGGGGGG....',
-    '...GGGGggGGGGS..',
-    '..GGGGGggGGGGS..',
-    '..SGGGGggGGGG...',
-    '...GGGGGGGGGG...',
-    '....PPPPPPPP....',
-    '....PPP..PPP....',
-    '....PPP..PPP....',
-    '....WWW..WWW....'
-  ];
-  var BAL = [
-    '..xxx..',
-    '.xxxxx.',
-    'xxhxxxx',
-    'xhxxxxx',
-    'xxxxxxx',
-    '.xxxxx.',
-    '..xxx..',
-    '...x...'
-  ];
-  var BIRD = [
-    ['O.....O','OO...OO','.OO.OO.','...O...'],
-    ['.......','.......','OOOOOOO','...O...']
-  ];
-  function sprite(map, x, y, pal) {
-    for (var r = 0; r < map.length; r++) for (var c = 0; c < map[r].length; c++) {
-      var ch = map[r][c]; if (ch === '.') continue;
-      ctx.fillStyle = pal[ch] || PAL[ch]; ctx.fillRect((x + c) | 0, (y + r) | 0, 1, 1);
+  // 물고기: [이모지, 마리 수]
+  [['🐟', 3], ['🐠', 2], ['🐡', 1]].forEach(function (f) {
+    for (var i = 0; i < f[1]; i++) {
+      var el = document.createElement('div');
+      var right = Math.random() < 0.5;
+      var dur = r(14, 26);
+      el.className = 'fish' + (right ? ' right' : '');
+      el.style.top = r(20, 75) + '%';
+      el.style.fontSize = r(32, 48) + 'px';
+      el.style.animation = (right ? 'swimRight ' : 'swimLeft ') + dur + 's linear ' + (-r(0, dur)) + 's infinite';
+      el.innerHTML = '<span style="animation-delay:' + (-r(0, 3)) + 's">' + f[0] + '</span>';
+      tank.appendChild(el);
     }
+  });
+
+  // 해파리
+  for (var j = 0; j < 3; j++) {
+    var jl = document.createElement('div');
+    jl.className = 'jelly';
+    jl.textContent = '🪼';
+    jl.style.left = r(35, 65) + '%';
+    jl.style.top = r(24, 40) + '%';
+    jl.style.fontSize = r(34, 44) + 'px';
+    jl.style.animationDelay = (-r(0, 7)) + 's';
+    tank.appendChild(jl);
   }
 
-  // ---- scene objects ----
-  var clouds = [], birds = [], floaters = [], hills = [], trees = [];
-  function blob(cx, cy, r) {
-    for (var y = -r; y <= r; y++) for (var x = -r; x <= r; x++) if (x*x + y*y <= r*r) ctx.fillRect(cx + x, cy + y, 1, 1);
+  // 거품
+  for (var k = 0; k < 14; k++) {
+    var b = document.createElement('div');
+    var s = r(8, 26);
+    b.className = 'bubble';
+    b.style.width = b.style.height = s + 'px';
+    b.style.left = r(2, 98) + '%';
+    b.style.animationDuration = r(7, 14) + 's';
+    b.style.animationDelay = (-r(0, 14)) + 's';
+    tank.appendChild(b);
   }
-  function drawCloud(x, y, sz) {
-    x |= 0; y |= 0;
-    var parts = [[0,4,4],[6,1,6],[13,3,5],[19,5,3]];
-    ctx.fillStyle = '#1b1b22';
-    parts.forEach(function(p){ blob(Math.round(x+p[0]*sz/6), Math.round(y+p[1]*sz/6), Math.round(p[2]*sz/6)+1); });
-    ctx.fillStyle = '#ffffff';
-    parts.forEach(function(p){ blob(Math.round(x+p[0]*sz/6), Math.round(y+p[1]*sz/6), Math.round(p[2]*sz/6)); });
-    
-  }
-
-  function setup() {
-    S = window.innerWidth < 720 ? 3 : 4;
-    W = Math.ceil(window.innerWidth / S); H = Math.ceil(window.innerHeight / S);
-    cv.width = W; cv.height = H;
-    GY = H - Math.max(26, Math.round(H * 0.15));
-    clouds = []; birds = []; floaters = []; hills = []; trees = [];
-    var n = Math.max(3, Math.round(W / 70));
-    for (var i = 0; i < n; i++) clouds.push({ x: Math.random() * W, y: 18 + Math.random() * (H * 0.35), s: 5 + Math.random() * 3, v: 0.04 + Math.random() * 0.05 });
-    for (i = 0; i < 4; i++) birds.push({ x: Math.random() * W, y: 40 + Math.random() * (GY - 90), v: 0.25 + Math.random() * 0.2, p: Math.random() * 10 });
-    var cols = ['#ff4d3d', '#ffcf3d', '#ff7ab6', '#5ad1ff'];
-    for (i = 0; i < 3; i++) floaters.push({ x: Math.random() * W, y: GY - 20 - Math.random() * GY * 0.6, v: 0.12 + Math.random() * 0.1, c: cols[i % 4] });
-    for (var x = 10; x < W; x += 55 + Math.random() * 40) hills.push({ x: Math.round(x), r: Math.round(10 + Math.random() * 8) });
-    for (x = 30; x < W; x += 70 + Math.random() * 60) { var k = 1 + (Math.random() * 3 | 0); for (var j = 0; j < k; j++) trees.push({ x: Math.round(x + j * 9), h: Math.round(9 + Math.random() * 6) }); }
-  }
-
-  function drawGround(t) {
-    // hills
-    hills.forEach(function (h) {
-      ctx.fillStyle = '#1b1b22';
-      for (var y = -h.r - 1; y <= 0; y++) for (var x = -h.r - 1; x <= h.r + 1; x++) if (x*x + y*y <= (h.r+1)*(h.r+1)) ctx.fillRect(h.x + x, GY + y, 1, 1);
-      ctx.fillStyle = '#f3b63f';
-      for (y = -h.r; y <= 0; y++) for (x = -h.r; x <= h.r; x++) if (x*x + y*y <= h.r*h.r) ctx.fillRect(h.x + x, GY + y, 1, 1);
-      ctx.fillStyle = '#f8d27a'; ctx.fillRect(h.x - 3, GY - h.r + 2, 2, 2);
-    });
-    // trees
-    trees.forEach(function (tr) {
-      var x = tr.x | 0, top = GY - tr.h;
-      ctx.fillStyle = '#1b1b22'; ctx.fillRect(x + 1, GY - 3, 1, 3);
-      var hh = Math.round(tr.h - 3);
-      ctx.fillStyle = '#1b1b22';
-      ctx.fillRect(x, top - 1, 3, 1); ctx.fillRect(x - 1, top, 5, hh); ctx.fillRect(x, top + hh, 3, 1);
-      ctx.fillRect(x - 2, top + 1, 7, hh - 2);
-      ctx.fillStyle = '#a7ea8f';
-      ctx.fillRect(x, top, 3, hh); ctx.fillRect(x - 1, top + 1, 5, hh - 2);
-      ctx.fillStyle = '#d4f7c4'; ctx.fillRect(x, top + 1, 1, 2);
-    });
-    // grass + dirt
-    ctx.fillStyle = '#1b1b22'; ctx.fillRect(0, GY, W, 1);
-    ctx.fillStyle = '#9be88c'; ctx.fillRect(0, GY + 1, W, 7);
-    ctx.fillStyle = '#5bbf5a';
-    for (var x = 0; x < W; x += 6) { ctx.fillRect(x + 2, GY + 3, 1, 1); ctx.fillRect(x + 4, GY + 3, 1, 1); }
-    // scalloped edge
-    ctx.fillStyle = '#1b1b22';
-    for (x = 0; x < W; x += 8) { ctx.fillRect(x, GY + 8, 8, 1); ctx.fillRect(x + 3, GY + 9, 2, 1); }
-    ctx.fillStyle = '#f2c14e'; ctx.fillRect(0, GY + 9, W, H - GY - 9);
-    ctx.fillStyle = '#d89b2b';
-    for (x = 0; x < W; x += 4) for (var y = GY + 12; y < H; y += 5) ctx.fillRect(x + ((y / 5) % 2 ? 2 : 0), y, 1, 3);
-    ctx.fillStyle = '#9be88c';
-    for (x = 0; x < W; x += 8) { ctx.fillRect(x + 1, GY + 8, 2, 1); ctx.fillRect(x + 5, GY + 8, 2, 1); }
-  }
-
-  function drawBalloon(x, y, color, stringTo) {
-    x |= 0; y |= 0;
-    if (stringTo) {
-      ctx.fillStyle = '#1b1b22';
-      var sx = x + 3, sy = y + 8, ex = stringTo[0], ey = stringTo[1];
-      var n = Math.max(Math.abs(ex - sx), Math.abs(ey - sy));
-      for (var i = 0; i <= n; i++) ctx.fillRect(Math.round(sx + (ex - sx) * i / n), Math.round(sy + (ey - sy) * i / n), 1, 1);
-    } else {
-      ctx.fillStyle = '#1b1b22';
-      for (var j = 8; j < 16; j++) ctx.fillRect(x + 3 + ((j >> 1) % 2), y + j, 1, 1);
-    }
-    // outline
-    ctx.fillStyle = '#1b1b22';
-    ctx.fillRect(x + 1, y - 1, 5, 1); ctx.fillRect(x - 1, y + 1, 1, 5); ctx.fillRect(x + 7, y + 1, 1, 5);
-    ctx.fillRect(x, y, 1, 1); ctx.fillRect(x + 6, y, 1, 1); ctx.fillRect(x, y + 6, 1, 1); ctx.fillRect(x + 6, y + 6, 1, 1);
-    ctx.fillRect(x + 1, y + 7, 1, 1); ctx.fillRect(x + 5, y + 7, 1, 1);
-    sprite(BAL, x, y, { x: color, h: '#ffffff' });
-  }
-
-  var t0 = performance.now(), last = 0;
-  function frame(now) {
-    var t = (now - t0) / 16.67;
-    if (!reduce) requestAnimationFrame(frame);
-    if (now - last < 33 && !reduce) return; last = now;
-
-    ctx.fillStyle = '#6ec0f7'; ctx.fillRect(0, 0, W, H);
-
-    clouds.forEach(function (c) { c.x -= c.v; if (c.x < -40) c.x = W + 10; drawCloud(c.x, c.y, c.s); });
-    floaters.forEach(function (f) { f.y -= f.v; if (f.y < -20) { f.y = GY + 10; f.x = Math.random() * W; } drawBalloon(f.x + Math.sin((t + f.x) / 30) * 2, f.y, f.c); });
-    birds.forEach(function (b) { b.x -= b.v; if (b.x < -8) { b.x = W + 8; b.y = 40 + Math.random() * (GY - 90); } sprite(BIRD[((t / 8 + b.p) | 0) % 2], b.x | 0, (b.y + Math.sin((t + b.p * 10) / 12) * 2) | 0, {}); });
-
-    drawGround(t);
-
-    // avatar with balloons
-    var ax = Math.round(W * 0.42 + Math.sin(t / 90) * W * 0.12);
-    var ay = Math.round(GY * 0.48 + Math.sin(t / 25) * 4);
-    var hand = [ax + 13, ay + 15];
-    drawBalloon(ax + 4, ay - 26, '#ff4d3d', hand);
-    drawBalloon(ax + 11, ay - 30, '#ff7ab6', hand);
-    drawBalloon(ax + 17, ay - 24, '#ffcf3d', hand);
-    // outline for avatar
-    ctx.fillStyle = '#1b1b22';
-    for (var r = 0; r < ME.length; r++) for (var c = 0; c < ME[r].length; c++) if (ME[r][c] !== '.') {
-      ctx.fillRect(ax + c - 1, ay + r, 1, 1); ctx.fillRect(ax + c + 1, ay + r, 1, 1); ctx.fillRect(ax + c, ay + r - 1, 1, 1); ctx.fillRect(ax + c, ay + r + 1, 1, 1);
-    }
-    sprite(ME, ax, ay, {});
-  }
-
-  setup();
-  window.addEventListener('resize', function () { setup(); if (reduce) frame(performance.now()); });
-  requestAnimationFrame(frame);
 })();
 </script>
 </body>
